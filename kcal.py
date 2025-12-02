@@ -64,7 +64,7 @@ class EdzesKcalNaplo(QWidget):
         self.setGeometry(100, 100, 750, 750) 
 
         self.naplo = []
-        self._betolt_naplot()
+        self._betolt_naplot() 
 
         fo_layout = QVBoxLayout()
         
@@ -100,6 +100,23 @@ class EdzesKcalNaplo(QWidget):
             
         fo_layout.addWidget(self.edzes_combo)
 
+        datum_layout = QHBoxLayout()
+        datum_layout.addWidget(QLabel("Napló szűrése dátum szerint:"))
+        self.szuro_datum = QDateEdit(QDate.currentDate())
+        self.szuro_datum.setCalendarPopup(True)
+        self.szuro_datum.setDate(QDate.currentDate())
+        self.szuro_datum.dateChanged.connect(self._frissit_naplo_listat_szurve)
+        datum_layout.addWidget(self.szuro_datum)
+        datum_layout.addStretch(1)
+        fo_layout.addLayout(datum_layout)
+
+        self.ossz_kcal_label = QLabel("Összesített kcal a mai napra: 0.0 kcal")
+        self.ossz_kcal_label.setStyleSheet("font-weight: bold;")
+        fo_layout.addWidget(self.ossz_kcal_label)
+        
+        self.naplo_list = QListWidget() 
+        fo_layout.addWidget(self.naplo_list)
+
         ido_layout = QHBoxLayout()
         self.ido_label = QLabel("Időtartam (perc):")
         self.ido_input = QLineEdit()
@@ -117,6 +134,7 @@ class EdzesKcalNaplo(QWidget):
         fo_layout.addLayout(gombok_layout)
         
         self.setLayout(fo_layout)
+        self._frissit_naplo_listat_szurve()
 
 
     def _populate_combo_box(self, combo_box, edzes_data, plain_list):
@@ -145,6 +163,32 @@ class EdzesKcalNaplo(QWidget):
                 json.dump(self.naplo, f, indent=4)
         except IOError:
             QMessageBox.warning(self, "Hiba", "Nem sikerült elmenteni a naplót a lemezre!")
+    
+    def _frissit_naplo_listat_szurve(self):
+        kivalasztott_datum = self.szuro_datum.date().toString(Qt.DateFormat.ISODate)
+        
+        self.naplo_list.clear()
+        napi_osszeg = 0.0
+        
+        for i, bejegyzes in enumerate(self.naplo):
+            if bejegyzes['datum'] == kivalasztott_datum:
+                kcal = bejegyzes['kcal']
+                ido = bejegyzes['perc']
+                edzes = bejegyzes['edzes']
+                
+                list_item_text = f"{edzes} | {ido} perc | {kcal:.1f} kcal"
+                
+                item = QListWidgetItem(list_item_text)
+                item.setData(Qt.ItemDataRole.UserRole, i) 
+                self.naplo_list.addItem(item)
+                
+                napi_osszeg += kcal
+                
+        self.ossz_kcal_label.setText(f"Összesített kcal a {kivalasztott_datum} napra: {napi_osszeg:.1f} kcal")
+        
+        if not self.naplo_list.count():
+            self.naplo_list.addItem(f"Nincs bejegyzés a(z) {kivalasztott_datum} napon.")
+
 
     def hozzaad_edzest(self):
         edzes = self.edzes_combo.currentText()
@@ -152,7 +196,7 @@ class EdzesKcalNaplo(QWidget):
         if edzes.startswith("---") or edzes == "Nincs találat":
             QMessageBox.warning(self, "Hiba", "Válassz ki egy érvényes edzésformát!")
             return
-            
+
         try:
             perc = float(self.ido_input.text())
             testsuly = float(self.suly_input.text())
@@ -186,7 +230,9 @@ class EdzesKcalNaplo(QWidget):
             'met_ertek': met_ertek 
         }
         self.naplo.append(naplo_item)
-        self._ment_naplot()
+        self._ment_naplot() 
+        
+        self._frissit_naplo_listat_szurve()
         
         QMessageBox.information(self, "Sikeres Rögzítés", 
                                 f"Rögzítve: {edzes} ({perc} perc) - {kcal:.1f} kcal elégetve.")
