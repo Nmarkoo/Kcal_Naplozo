@@ -97,8 +97,21 @@ class EdzesKcalNaplo(QWidget):
         self.edzes_combo.setModel(self.combo_model) 
         
         self._populate_combo_box(self.edzes_combo, EDZESFORMAK_MET, osszes_edzes_plain)
+        self.edzes_combo.currentTextChanged.connect(self._frissit_extra_mezo)
             
         fo_layout.addWidget(self.edzes_combo)
+
+        extra_layout = QHBoxLayout()
+        self.extra_label = QLabel("Kiegészítő adat:")
+        self.extra_input = QLineEdit()
+        self.extra_input.setPlaceholderText("Adj meg Sebességet (km/h) a biciklihez")
+        self.extra_input.setValidator(QDoubleValidator(1.0, 99.9, 1))
+        
+        extra_layout.addWidget(self.extra_label)
+        extra_layout.addWidget(self.extra_input)
+        fo_layout.addLayout(extra_layout)
+        
+        self._frissit_extra_mezo(self.edzes_combo.currentText())
 
         datum_layout = QHBoxLayout()
         datum_layout.addWidget(QLabel("Napló szűrése dátum szerint:"))
@@ -150,6 +163,19 @@ class EdzesKcalNaplo(QWidget):
                 self.combo_model.appendRow(item_edzes)
                 plain_list.append(edzes)
 
+    def _frissit_extra_mezo(self, edzes):
+        if edzes in ["Kerékpár", "Szobabicikli"]:
+            self.extra_label.setText("Sebesség (km/h):")
+            self.extra_input.setPlaceholderText("Kerékpározás sebessége km/h-ban")
+            self.extra_label.setVisible(True)
+            self.extra_input.setVisible(True)
+        else:
+            self.extra_label.setText("Kiegészítő adat:")
+            self.extra_input.setPlaceholderText("Csak a Kerékpározáshoz szükséges")
+            self.extra_label.setVisible(False)
+            self.extra_input.setVisible(False)
+            self.extra_input.clear()
+
     def _betolt_naplot(self):
         try:
             with open(NAPLO_FILENEV, 'r', encoding='utf-8') as f:
@@ -196,7 +222,7 @@ class EdzesKcalNaplo(QWidget):
         if edzes.startswith("---") or edzes == "Nincs találat":
             QMessageBox.warning(self, "Hiba", "Válassz ki egy érvényes edzésformát!")
             return
-
+            
         try:
             perc = float(self.ido_input.text())
             testsuly = float(self.suly_input.text())
@@ -207,10 +233,27 @@ class EdzesKcalNaplo(QWidget):
             return
 
         met_ertek = 0
-        for csoport in EDZESFORMAK_MET.values():
-            if edzes in csoport:
-                met_ertek = csoport[edzes]
-                break
+        sebesseg = None
+
+        if edzes in ["Kerékpár", "Szobabicikli"]:
+            try:
+                sebesseg = float(self.extra_input.text())
+                if sebesseg <= 0: raise ValueError
+                
+                if sebesseg < 16: 
+                    met_ertek = 4.0
+                elif sebesseg < 24: 
+                    met_ertek = 8.0
+                else: 
+                    met_ertek = 12.0
+            except ValueError:
+                QMessageBox.warning(self, "Hiba", "Kérjük, adj meg érvényes sebességet (km/h) a kerékpározáshoz!")
+                return
+        else:
+            for csoport in EDZESFORMAK_MET.values():
+                if edzes in csoport:
+                    met_ertek = csoport[edzes]
+                    break
         
         if met_ertek == 0:
               QMessageBox.warning(self, "Hiba", "Nem található MET érték ehhez az edzéshez.")
@@ -218,7 +261,7 @@ class EdzesKcalNaplo(QWidget):
         
         ido_ora = perc / 60
         kcal = met_ertek * testsuly * ido_ora * 1.05
-        
+
         naplo_item = {
             'datum': QDate.currentDate().toString(Qt.DateFormat.ISODate),
             'edzes': edzes,
@@ -227,7 +270,8 @@ class EdzesKcalNaplo(QWidget):
             'nem': self.nem_combo.currentText(),
             'perc': perc,
             'kcal': kcal,
-            'met_ertek': met_ertek 
+            'met_ertek': met_ertek,
+            'sebesseg': sebesseg
         }
         self.naplo.append(naplo_item)
         self._ment_naplot() 
@@ -238,6 +282,7 @@ class EdzesKcalNaplo(QWidget):
                                 f"Rögzítve: {edzes} ({perc} perc) - {kcal:.1f} kcal elégetve.")
         
         self.ido_input.clear()
+        self.extra_input.clear()
 
     def closeEvent(self, event):
         self._ment_naplot()
