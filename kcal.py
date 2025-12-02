@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QIntValidator, QDoubleValidator, QStandardItem, QStandardItemModel 
 
-
 EDZESFORMAK_MET = {
     "Kardió": {
         "Futás": 10.0,
@@ -65,6 +64,7 @@ class EdzesKcalNaplo(QWidget):
         self.setGeometry(100, 100, 750, 750) 
 
         self.naplo = []
+        self._betolt_naplot()
 
         fo_layout = QVBoxLayout()
         
@@ -99,7 +99,7 @@ class EdzesKcalNaplo(QWidget):
         self._populate_combo_box(self.edzes_combo, EDZESFORMAK_MET, osszes_edzes_plain)
             
         fo_layout.addWidget(self.edzes_combo)
-        
+
         ido_layout = QHBoxLayout()
         self.ido_label = QLabel("Időtartam (perc):")
         self.ido_input = QLineEdit()
@@ -108,10 +108,10 @@ class EdzesKcalNaplo(QWidget):
         ido_layout.addWidget(self.ido_label)
         ido_layout.addWidget(self.ido_input)
         fo_layout.addLayout(ido_layout)
-
+        
         gombok_layout = QHBoxLayout()
         self.hozzaad_gomb = QPushButton("✅ Hozzáadás a naplóhoz")
-        self.hozzaad_gomb.clicked.connect(self.hozzaad_edzest) 
+        self.hozzaad_gomb.clicked.connect(self.hozzaad_edzest)
         gombok_layout.addWidget(self.hozzaad_gomb)
         gombok_layout.addStretch(1) 
         fo_layout.addLayout(gombok_layout)
@@ -131,23 +131,35 @@ class EdzesKcalNaplo(QWidget):
                 item_edzes = QStandardItem(edzes)
                 self.combo_model.appendRow(item_edzes)
                 plain_list.append(edzes)
-    
+
+    def _betolt_naplot(self):
+        try:
+            with open(NAPLO_FILENEV, 'r', encoding='utf-8') as f:
+                self.naplo = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.naplo = []
+
+    def _ment_naplot(self):
+        try:
+            with open(NAPLO_FILENEV, 'w', encoding='utf-8') as f:
+                json.dump(self.naplo, f, indent=4)
+        except IOError:
+            QMessageBox.warning(self, "Hiba", "Nem sikerült elmenteni a naplót a lemezre!")
 
     def hozzaad_edzest(self):
-        """Kiszámítja az elégetett kalóriát a MET képlet alapján és teszteli az eredményt."""
         edzes = self.edzes_combo.currentText()
         
         if edzes.startswith("---") or edzes == "Nincs találat":
             QMessageBox.warning(self, "Hiba", "Válassz ki egy érvényes edzésformát!")
             return
             
-
         try:
             perc = float(self.ido_input.text())
             testsuly = float(self.suly_input.text())
-            if perc <= 0 or testsuly <= 0: raise ValueError
+            magassag = float(self.magassag_input.text())
+            if perc <= 0 or testsuly <= 0 or magassag <= 0: raise ValueError
         except ValueError:
-            QMessageBox.warning(self, "Hiba", "Ellenőrizd a bemenetet! A testsúly és az idő pozitív számmal kell megadni.")
+            QMessageBox.warning(self, "Hiba", "Ellenőrizd a bemenetet! Az összes alap numerikus mezőnek pozitív számnak kell lennie.")
             return
 
         met_ertek = 0
@@ -163,10 +175,27 @@ class EdzesKcalNaplo(QWidget):
         ido_ora = perc / 60
         kcal = met_ertek * testsuly * ido_ora * 1.05
         
-        QMessageBox.information(self, "Kiszámítva", 
-                                f"Edzés: {edzes}\nTestsúly: {testsuly} kg\nMET: {met_ertek}\nPerc: {perc}\n\nBecsült Elégetett kcal: {kcal:.1f}")
+        naplo_item = {
+            'datum': QDate.currentDate().toString(Qt.DateFormat.ISODate),
+            'edzes': edzes,
+            'testsuly': testsuly,
+            'magassag': magassag, 
+            'nem': self.nem_combo.currentText(),
+            'perc': perc,
+            'kcal': kcal,
+            'met_ertek': met_ertek 
+        }
+        self.naplo.append(naplo_item)
+        self._ment_naplot()
+        
+        QMessageBox.information(self, "Sikeres Rögzítés", 
+                                f"Rögzítve: {edzes} ({perc} perc) - {kcal:.1f} kcal elégetve.")
         
         self.ido_input.clear()
+
+    def closeEvent(self, event):
+        self._ment_naplot()
+        event.accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
