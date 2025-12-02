@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QIntValidator, QDoubleValidator, QStandardItem, QStandardItemModel 
 
+
 EDZESFORMAK_MET = {
     "Kardió": {
         "Futás": 10.0,
@@ -98,7 +99,7 @@ class EdzesKcalNaplo(QWidget):
         self._populate_combo_box(self.edzes_combo, EDZESFORMAK_MET, osszes_edzes_plain)
             
         fo_layout.addWidget(self.edzes_combo)
-
+        
         ido_layout = QHBoxLayout()
         self.ido_label = QLabel("Időtartam (perc):")
         self.ido_input = QLineEdit()
@@ -107,22 +108,22 @@ class EdzesKcalNaplo(QWidget):
         ido_layout.addWidget(self.ido_label)
         ido_layout.addWidget(self.ido_input)
         fo_layout.addLayout(ido_layout)
-        
- 
+
         gombok_layout = QHBoxLayout()
+        self.hozzaad_gomb = QPushButton("✅ Hozzáadás a naplóhoz")
+        self.hozzaad_gomb.clicked.connect(self.hozzaad_edzest) 
+        gombok_layout.addWidget(self.hozzaad_gomb)
+        gombok_layout.addStretch(1) 
         fo_layout.addLayout(gombok_layout)
         
         self.setLayout(fo_layout)
 
 
-
     def _populate_combo_box(self, combo_box, edzes_data, plain_list):
-        """Feltölti a ComboBoxot kategóriákkal és edzésekkel."""
         self.combo_model.clear()
         
         for csoport_nev, edzesek in edzes_data.items():
             item_sepa = QStandardItem(f"--- {csoport_nev.upper()} ---")
-            
             item_sepa.setFlags(item_sepa.flags() & ~Qt.ItemFlag.ItemIsSelectable) 
             self.combo_model.appendRow(item_sepa)
             
@@ -130,6 +131,42 @@ class EdzesKcalNaplo(QWidget):
                 item_edzes = QStandardItem(edzes)
                 self.combo_model.appendRow(item_edzes)
                 plain_list.append(edzes)
+    
+
+    def hozzaad_edzest(self):
+        """Kiszámítja az elégetett kalóriát a MET képlet alapján és teszteli az eredményt."""
+        edzes = self.edzes_combo.currentText()
+        
+        if edzes.startswith("---") or edzes == "Nincs találat":
+            QMessageBox.warning(self, "Hiba", "Válassz ki egy érvényes edzésformát!")
+            return
+            
+
+        try:
+            perc = float(self.ido_input.text())
+            testsuly = float(self.suly_input.text())
+            if perc <= 0 or testsuly <= 0: raise ValueError
+        except ValueError:
+            QMessageBox.warning(self, "Hiba", "Ellenőrizd a bemenetet! A testsúly és az idő pozitív számmal kell megadni.")
+            return
+
+        met_ertek = 0
+        for csoport in EDZESFORMAK_MET.values():
+            if edzes in csoport:
+                met_ertek = csoport[edzes]
+                break
+        
+        if met_ertek == 0:
+              QMessageBox.warning(self, "Hiba", "Nem található MET érték ehhez az edzéshez.")
+              return
+        
+        ido_ora = perc / 60
+        kcal = met_ertek * testsuly * ido_ora * 1.05
+        
+        QMessageBox.information(self, "Kiszámítva", 
+                                f"Edzés: {edzes}\nTestsúly: {testsuly} kg\nMET: {met_ertek}\nPerc: {perc}\n\nBecsült Elégetett kcal: {kcal:.1f}")
+        
+        self.ido_input.clear()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
